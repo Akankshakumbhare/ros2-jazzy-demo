@@ -49,7 +49,7 @@ stages:
 
         cat output.log
 
-        if grep -q "Publishing" output.log; then
+        if cat output.log | grep -q "Hello, world!"; then
           echo "ROS2 publisher validation successful"
         else
           echo "ROS2 publisher validation failed"
