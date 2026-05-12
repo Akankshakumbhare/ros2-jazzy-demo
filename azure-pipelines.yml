@@ -74,22 +74,13 @@ stages:
         artifactName: ros2-logs
 
     # Push image to ACR
-        # Login to Azure Container Registry
-    - task: Docker@2
-      displayName: Login to ACR
-
-      inputs:
-        command: login
-        containerRegistry: acr-service-connection
-
-    # Push image
     - task: Docker@2
       displayName: Push Image to ACR
 
       inputs:
-        command: push
-        containerRegistry: acr-service-connection
-        repository: $(imageName)
+       command: push
+       containerRegistry: acr-service-connection
+       repository: $(imageName)
 
-        tags: |
-          $(tag)
+       tags: |
+        $(tag)
