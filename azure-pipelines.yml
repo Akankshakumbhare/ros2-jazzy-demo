@@ -45,15 +45,16 @@ stages:
 
 
     - script: |
-        docker logs ros-demo > output.log
 
-        cat output.log
+        docker logs ros-demo > output.log 2>&1
 
-        if cat output.log | grep -q "Hello, world!"; then
-          echo "ROS2 publisher validation successful"
+         cat output.log
+
+        if grep -q "Hello, world!" output.log; then
+         echo "ROS2 publisher validation successful"
         else
-          echo "ROS2 publisher validation failed"
-          exit 1
+         echo "ROS2 publisher validation failed"
+        exit 1
         fi
 
       displayName: Validate Publisher
