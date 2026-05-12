@@ -1,0 +1,50 @@
+trigger:
+- main
+
+pool:
+  vmImage: ubuntu-24.04
+
+variables:
+  imageName: ros2-jazzy-demo
+  tag: $(Build.BuildId)
+
+stages:
+
+- stage: Build_Test
+  jobs:
+
+  - job: BuildDocker
+    steps:
+
+    - checkout: self
+
+    - task: Docker@2
+      displayName: Build Image
+      inputs:
+        command: build
+        Dockerfile: Dockerfile
+        repository: $(imageName)
+        tags: |
+          $(tag)
+
+    - script: |
+        docker run -d --name ros-demo $(imageName):$(tag)
+        sleep 10
+      displayName: Start Container
+
+    - script: |
+        docker logs ros-demo
+      displayName: Show Logs
+
+    - script: |
+        docker logs ros-demo | grep Publishing
+      displayName: Validate Publisher
+
+    - script: |
+        docker logs ros-demo > publisher.log
+      displayName: Save Logs
+
+    - task: PublishBuildArtifacts@1
+      inputs:
+        pathToPublish: publisher.log
+        artifactName: ros2-logs
