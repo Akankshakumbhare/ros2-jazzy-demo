@@ -5,21 +5,24 @@ pool:
   vmImage: ubuntu-24.04
 
 variables:
-  imageName: ros2-jazzy-demo
+  imageName: ros2registry.azurecr.io/ros2-jazzy-demo
   tag: $(Build.BuildId)
 
 stages:
 
 - stage: Build_Test
+  displayName: Build and Test
 
   jobs:
 
   - job: BuildDocker
+    displayName: Build Docker Image
 
     steps:
 
     - checkout: self
 
+    # Build Docker image
     - task: Docker@2
       displayName: Build Image
 
@@ -31,43 +34,53 @@ stages:
         tags: |
           $(tag)
 
+    # Start container
     - script: |
         docker run -d --name ros-demo $(imageName):$(tag)
         sleep 10
-
       displayName: Start Container
 
-
+    # Show logs
     - script: |
         docker logs ros-demo
-
       displayName: Show Logs
 
-
+    # Validate ROS2 publisher output
     - script: |
-
         docker logs ros-demo > output.log 2>&1
 
-         cat output.log
+        cat output.log
 
         if grep -q "Hello, world!" output.log; then
-         echo "ROS2 publisher validation successful"
+          echo "ROS2 publisher validation successful"
         else
-         echo "ROS2 publisher validation failed"
-        exit 1
+          echo "ROS2 publisher validation failed"
+          exit 1
         fi
 
       displayName: Validate Publisher
 
-
+    # Save logs
     - script: |
         docker logs ros-demo > publisher.log
-
       displayName: Save Logs
 
-
+    # Publish logs as pipeline artifact
     - task: PublishBuildArtifacts@1
+      displayName: Publish Logs Artifact
 
       inputs:
         pathToPublish: publisher.log
         artifactName: ros2-logs
+
+    # Push image to ACR
+    - task: Docker@2
+      displayName: Push Image to ACR
+
+      inputs:
+        command: push
+        containerRegistry: acr-service-connection
+        repository: $(imageName)
+
+        tags: |
+          $(tag)
