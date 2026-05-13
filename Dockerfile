@@ -1,6 +1,6 @@
 FROM ros:jazzy-ros-base
 
-LABEL maintainer="Abhishek"
+LABEL maintainer="Akanksha"
 LABEL description="ROS2 Jazzy CI/CD Demo"
 
 # Install ROS2 example packages
