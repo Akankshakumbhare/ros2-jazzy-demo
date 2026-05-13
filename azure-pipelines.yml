@@ -1,3 +1,4 @@
+
 trigger:
 - main
 
@@ -10,6 +11,10 @@ variables:
   tag: $(Build.BuildId)
 
 stages:
+
+# =========================================================
+# STAGE 1 — BUILD TEST PUSH
+# =========================================================
 
 - stage: Build_Test
   displayName: Build Test and Push
@@ -29,11 +34,8 @@ stages:
 
       inputs:
         command: buildAndPush
-
         repository: $(imageName)
-
         Dockerfile: Dockerfile
-
         containerRegistry: acr-service-connection
 
         tags: |
@@ -95,3 +97,33 @@ stages:
       inputs:
         pathToPublish: publisher.log
         artifactName: ros2-logs
+
+
+# =========================================================
+# STAGE 2 — DEPLOY TO AKS
+# =========================================================
+
+- stage: Deploy_AKS
+  displayName: Deploy to AKS
+
+  dependsOn: Build_Test
+
+  jobs:
+
+  - job: Deploy
+    displayName: Kubernetes Deployment
+
+    steps:
+
+    - checkout: self
+
+    - task: KubernetesManifest@1
+      displayName: Deploy to AKS
+
+      inputs:
+        action: deploy
+        kubernetesServiceConnection: aks-service-connection
+
+        manifests: |
+         k8s/deployment.yaml
+
