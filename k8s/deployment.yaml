@@ -1,0 +1,41 @@
+apiVersion: apps/v1
+kind: Deployment
+
+metadata:
+  name: ros2-publisher
+
+spec:
+  replicas: 1
+
+  selector:
+    matchLabels:
+      app: ros2-publisher
+
+  template:
+    metadata:
+      labels:
+        app: ros2-publisher
+
+    spec:
+      containers:
+
+      - name: ros2-publisher
+
+        image: ros2registry.azurecr.io/ros2-jazzy-demo:latest
+
+        imagePullPolicy: Always
+
+        resources:
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+
+        livenessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - ros2 topic list
+
+          initialDelaySeconds: 10
+          periodSeconds: 30
