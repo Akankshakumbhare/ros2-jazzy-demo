@@ -6,13 +6,12 @@ pool:
 
 variables:
   imageName: ros2-jazzy-demo
-  acrName: ros2registry.azurecr.io
   tag: $(Build.BuildId)
 
 stages:
 
 - stage: Build_Test
-  displayName: Build and Test
+  displayName: Build Test and Push
 
   jobs:
 
@@ -23,31 +22,39 @@ stages:
 
     - checkout: self
 
-    # Build Docker image
+    # Build and Push Docker image to ACR
     - task: Docker@2
-      displayName: Build Image
+      displayName: Build and Push Image
 
       inputs:
-        command: build
+        command: buildAndPush
+
+        repository: $(imageName)
+
         Dockerfile: Dockerfile
-        repository: $(acrName)/$(imageName)
+
+        containerRegistry: acr-service-connection
 
         tags: |
           $(tag)
+          latest
 
-    # Start container
+    # Start container locally for validation
     - script: |
-        docker run -d --name ros-demo $(acrName)/$(imageName):$(tag)
+        docker run -d --name ros-demo $(imageName):$(tag)
         sleep 10
+
       displayName: Start Container
 
-    # Show logs
+    # Show container logs
     - script: |
         docker logs ros-demo
+
       displayName: Show Logs
 
     # Validate ROS2 publisher output
     - script: |
+
         docker logs ros-demo > output.log 2>&1
 
         cat output.log
@@ -63,7 +70,8 @@ stages:
 
     # Save logs
     - script: |
-        docker logs ros-demo > publisher.log
+        docker logs ros-demo > publisher.log 2>&1
+
       displayName: Save Logs
 
     # Publish logs as pipeline artifact
@@ -73,24 +81,3 @@ stages:
       inputs:
         pathToPublish: publisher.log
         artifactName: ros2-logs
-
-    - task: Docker@2
-      displayName: Login to ACR
-
-      inputs:
-        command: login
-        containerRegistry: acr-service-connection
-
-    # Push image to ACR
-    - task: Docker@2
-      displayName: Push Image
-
-      inputs:
-        command: push
-        repository: $(imageName)
-
-        containerRegistry: acr-service-connection
-
-        tags: |
-           $(tag)
-           latest
