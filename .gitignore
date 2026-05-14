@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+
+# VSCode
+.vscode/
+
+# Kubernetes TLS secrets
+*.key
+*.crt
+
+# Logs
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+
+# Helm packages
+*.tgz
+
+# Kubernetes generated files
+*.bak
+
+# Environment files
+.env
