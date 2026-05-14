@@ -17,7 +17,7 @@ The solution automatically builds, tests, containerizes, deploys, and monitors a
 
 # High-Level Architecture
 
-
+```text
 Developer Push
       ↓
 GitHub Repository
