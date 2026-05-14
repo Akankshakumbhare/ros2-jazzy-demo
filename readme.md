@@ -26,7 +26,6 @@ Prometheus + Grafana Monitoring
 ________________________________________
 #Technologies Used
 Technology	Purpose
-ROS2 Jazzy	Robotics middleware
 Docker	Containerization
 Azure DevOps	CI/CD pipeline
 Azure Container Registry	Container image storage
