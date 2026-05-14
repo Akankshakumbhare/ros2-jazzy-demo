@@ -1,9 +1,9 @@
-# ROS2 Jazzy CI/CD Demo
-#Project Overview
+ROS2 Jazzy CI/CD Demo
+Project Overview
 This project demonstrates a complete CI/CD pipeline implementation for a ROS2 Jazzy application using Azure DevOps, Docker, Azure Kubernetes Service (AKS), Azure Container Registry (ACR), Prometheus, and Grafana.
 The solution automatically builds, tests, containerizes, deploys, and monitors a ROS2 application whenever developers push code changes to GitHub.
 The demo application uses ROS2 Jazzy minimal publisher/subscriber examples.
-# High-Level Architecture
+High-Level Architecture
 Developer Push
       ↓
 GitHub Repository
@@ -19,12 +19,12 @@ Azure Kubernetes Service (AKS)
 ROS2 Application Pod
       ↓
 Prometheus + Grafana Monitoring
-#Architecture Diagram
+Architecture Diagram
  ![Architecture Diagram](docs/architecture-diagram.png)
 
  
 ________________________________________
-#Technologies Used
+Technologies Used
 Technology	Purpose
 Docker	Containerization
 Azure DevOps	CI/CD pipeline
@@ -36,7 +36,7 @@ Grafana	Monitoring dashboard
 Helm	Kubernetes package management
 GitHub	Source control
 ________________________________________
-# CI/CD Pipeline
+CI/CD Pipeline
 The Azure DevOps pipeline automatically performs the following actions on every commit:
 1.	Pull latest source code from GitHub
 2.	Build Docker image
