@@ -1,0 +1,29 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+
+metadata:
+  name: ros2-ingress
+
+spec:
+  ingressClassName: nginx
+
+  tls:
+    - hosts:
+        - ros2-demo.local
+      secretName: ros2-tls
+
+  rules:
+    - host: ros2-demo.local
+
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+
+            backend:
+              service:
+                name: ros2-service
+
+                port:
+                  number: 80
+

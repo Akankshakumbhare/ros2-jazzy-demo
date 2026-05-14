@@ -42,3 +42,6 @@ kubectl logs deployment/ros2-publisher
 ## Grafana Dashboard
 
 Grafana dashboards were configured using Prometheus datasource to visualize Kubernetes metrics.
+## Monitoring Dashboard
+
+![Grafana Dashboard](monitoring/grafana-dashboard.png)
