@@ -2,8 +2,8 @@ apiVersion: apps/v1
 kind: Deployment
 
 metadata:
-  name: ros2-publisher
-
+  name: ros2-jazzy-demo
+  namespace: production
 spec:
   replicas: 1
 
@@ -30,12 +30,25 @@ spec:
             memory: "512Mi"
             cpu: "500m"
 
-        livenessProbe:
-          exec:
-            command:
-            - sh
-            - -c
-            - ros2 topic list
+        readinessProbe:
+            exec:
+                  command:
+                      - ros2
+                      - topic
+                      - list
+            initialDelaySeconds: 20
+            periodSeconds: 10
 
-          initialDelaySeconds: 10
-          periodSeconds: 30
+        livenessProbe:
+             exec:
+                  command:
+                  - ros2
+                  - topic
+                  - list
+             initialDelaySeconds: 30
+             periodSeconds: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 1

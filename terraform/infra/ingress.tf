@@ -3,16 +3,11 @@ resource "helm_release" "nginx_ingress" {
   namespace        = "ingress-nginx"
   create_namespace = true
 
+  depends_on = [
+    azurerm_kubernetes_cluster.aks,
+    kubernetes_namespace.production
+  ]
+
   repository = "https://kubernetes.github.io/ingress-nginx"
   chart      = "ingress-nginx"
-
-  set {
-    name  = "controller.replicaCount"
-    value = "2"
-  }
-
-  set {
-    name  = "controller.metrics.enabled"
-    value = "true"
-  }
 }

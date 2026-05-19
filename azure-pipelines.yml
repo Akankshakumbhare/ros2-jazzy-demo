@@ -6,16 +6,15 @@ pool:
 
 variables:
   imageName: ros2-jazzy-demo
-  acrName: ros2registry.azurecr.io
+  acrName: prodacr001.azurecr.io
   imageTag: $(Build.BuildId)
   namespace: production
+
+stages:
 
 # =========================================================
 # STAGE 1 — BUILD + SECURITY SCAN
 # =========================================================
-
-stages:
-
 - stage: Build_Scan
   displayName: Build and Security Scan
 
@@ -26,7 +25,6 @@ stages:
       steps:
         - checkout: self
 
-        # Build and push image
         - task: Docker@2
           displayName: Build and Push Image
           inputs:
@@ -41,7 +39,6 @@ stages:
         - script: docker images
           displayName: List Docker Images
 
-        # Install Trivy
         - script: |
             sudo apt-get update
             sudo apt-get install -y wget apt-transport-https gnupg lsb-release
@@ -63,7 +60,6 @@ stages:
             command: login
             containerRegistry: acr-service-connection
 
-        # Security scan
         - script: |
             trivy image \
               --timeout 10m \
@@ -73,7 +69,6 @@ stages:
               $(acrName)/$(imageName):$(imageTag)
           displayName: Trivy Security Scan
 
-        # Generate report
         - script: |
             trivy image \
               --format json \
@@ -90,7 +85,6 @@ stages:
 # =========================================================
 # STAGE 2 — RUNTIME VALIDATION
 # =========================================================
-
 - stage: Validate_Runtime
   displayName: Runtime Validation
   dependsOn: Build_Scan
@@ -105,7 +99,7 @@ stages:
 
         - script: |
             docker run -d --name ros-demo \
-            $(acrName)/$(imageName):$(imageTag)
+              $(acrName)/$(imageName):$(imageTag)
 
             sleep 20
           displayName: Start Container
@@ -118,7 +112,6 @@ stages:
 
         - script: |
             docker logs ros-demo > output.log 2>&1
-
             cat output.log
 
             if grep -q "Hello, world!" output.log; then
@@ -141,7 +134,6 @@ stages:
 # =========================================================
 # STAGE 3 — DEPLOY TO AKS
 # =========================================================
-
 - stage: Deploy_AKS
   displayName: Deploy to Production
   dependsOn: Validate_Runtime
@@ -155,9 +147,15 @@ stages:
       strategy:
         runOnce:
           deploy:
-
             steps:
               - checkout: self
+
+              - task: Kubernetes@1
+                displayName: Authenticate to AKS
+                inputs:
+                  connectionType: Kubernetes Service Connection
+                  kubernetesServiceEndpoint: aks-service-connection
+                  command: login
 
               - task: KubernetesManifest@1
                 displayName: Deploy to AKS
@@ -170,14 +168,12 @@ stages:
                   containers: |
                     $(acrName)/$(imageName):$(imageTag)
 
-              # Verify rollout
               - script: |
                   kubectl rollout status deployment/ros2-jazzy-demo \
-                  -n $(namespace) \
-                  --timeout=300s
+                    -n $(namespace) \
+                    --timeout=300s
                 displayName: Verify Rollout
 
-              # Validate pods
               - script: |
                   kubectl get pods -n $(namespace)
                   kubectl get svc -n $(namespace)
@@ -186,7 +182,6 @@ stages:
 # =========================================================
 # STAGE 4 — AUTO ROLLBACK
 # =========================================================
-
 - stage: Rollback
   displayName: Automatic Rollback
   dependsOn: Deploy_AKS
@@ -197,10 +192,14 @@ stages:
       displayName: Rollback Deployment
 
       steps:
-        - script: |
-            kubectl rollout undo deployment/ros2-jazzy-demo \
-            -n production
+        - task: Kubernetes@1
+          displayName: Authenticate to AKS
+          inputs:
+            connectionType: Kubernetes Service Connection
+            kubernetesServiceEndpoint: aks-service-connection
+            command: login
 
-            kubectl rollout status deployment/ros2-jazzy-demo \
-            -n production
+        - script: |
+            kubectl rollout undo deployment/ros2-jazzy-demo -n production
+            kubectl rollout status deployment/ros2-jazzy-demo -n production
           displayName: Rollback to Previous Stable Version
