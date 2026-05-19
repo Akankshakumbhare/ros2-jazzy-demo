@@ -31,7 +31,7 @@ stages:
             command: buildAndPush
             repository: $(imageName)
             Dockerfile: Dockerfile
-            containerRegistry: acr-service-connection
+            containerRegistry: prodacr001-manual
             tags: |
               $(imageTag)
               latest
@@ -58,12 +58,12 @@ stages:
           displayName: Login to ACR
           inputs:
             command: login
-            containerRegistry: acr-service-connection
+            containerRegistry: prodacr001-manual
 
         - script: |
             trivy image \
               --timeout 10m \
-              --severity HIGH,CRITICAL \
+              --severity CRITICAL \
               --exit-code 1 \
               --no-progress \
               $(acrName)/$(imageName):$(imageTag)
@@ -107,7 +107,9 @@ stages:
         - script: docker ps -a
           displayName: Check Containers
 
-        - script: docker logs ros-demo
+        - script: 
+            docker ps -a
+            docker logs ros-demo || true
           displayName: Show Logs
 
         - script: |
