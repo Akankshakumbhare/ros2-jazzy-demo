@@ -97,23 +97,27 @@ stages:
       steps:
         - checkout: self
 
+        # Run container
         - script: |
-            docker run -d --name ros-demo \
-              $(acrName)/$(imageName):$(imageTag)
+            docker run --name ros-demo \
+              $(acrName)/$(imageName):$(imageTag) || true
 
-            sleep 20
+            docker ps -a
           displayName: Start Container
 
-        - script: docker ps -a
+        # Show container status
+        - script: |
+            docker ps -a
           displayName: Check Containers
 
-        - script: 
-            docker ps -a
+        # Show logs without failing pipeline
+        - script: |
             docker logs ros-demo || true
           displayName: Show Logs
 
+        # Validate ROS2 output
         - script: |
-            docker logs ros-demo > output.log 2>&1
+            docker logs ros-demo > output.log 2>&1 || true
             cat output.log
 
             if grep -q "Hello, world!" output.log; then
@@ -124,7 +128,9 @@ stages:
             fi
           displayName: Validate Publisher
 
-        - script: docker logs ros-demo > publisher.log 2>&1
+        # Save logs as artifact
+        - script: |
+            docker logs ros-demo > publisher.log 2>&1 || true
           displayName: Save Logs
 
         - task: PublishBuildArtifacts@1
