@@ -134,7 +134,7 @@ stages:
            echo "ROS2 publisher validation failed"
            exit 1
            fi
-           displayName: Validate Publisher
+          displayName: Validate Publisher
 
         # Save logs as artifact
         - script: |
