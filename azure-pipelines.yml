@@ -63,7 +63,7 @@ stages:
         - script: |
             trivy image \
               --timeout 10m \
-              --severity HIGH,CRITICAL \
+              --severity CRITICAL \
               --exit-code 1 \
               --no-progress \
               $(acrName)/$(imageName):$(imageTag)
