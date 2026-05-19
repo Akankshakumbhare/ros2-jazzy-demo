@@ -31,7 +31,7 @@ stages:
             command: buildAndPush
             repository: $(imageName)
             Dockerfile: Dockerfile
-            containerRegistry: acr-service-connection
+            containerRegistry: prodacr001-manual
             tags: |
               $(imageTag)
               latest
@@ -58,7 +58,7 @@ stages:
           displayName: Login to ACR
           inputs:
             command: login
-            containerRegistry: acr-service-connection
+            containerRegistry: prodacr001-manual
 
         - script: |
             trivy image \
