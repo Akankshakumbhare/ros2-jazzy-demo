@@ -17,11 +17,11 @@ WORKDIR /home/rosuser
 
 SHELL ["/bin/bash", "-c"]
 
+# Source ROS automatically
 RUN echo "source /opt/ros/jazzy/setup.bash" >> ~/.bashrc
 
 # Healthcheck
 HEALTHCHECK CMD ros2 topic list || exit 1
 
-# Start publisher node
-CMD source /opt/ros/jazzy/setup.bash && \
-    ros2 run examples_rclcpp_minimal_publisher publisher_member_function
+# Start ROS2 publisher and keep container alive
+CMD ["/bin/bash", "-c", "source /opt/ros/jazzy/setup.bash && ros2 run examples_rclcpp_minimal_publisher publisher_member_function || true; tail -f /dev/null"]

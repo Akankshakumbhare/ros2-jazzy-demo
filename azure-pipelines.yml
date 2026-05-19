@@ -97,55 +97,59 @@ stages:
       steps:
         - checkout: self
 
-        # Run container
+        # Login to ACR
         - task: Docker@2
           displayName: Login to ACR
           inputs:
             command: login
             containerRegistry: prodacr001-manual
 
+        # Pull image from ACR
         - script: |
-           docker pull $(acrName)/$(imageName):$(imageTag)
+            docker pull $(acrName)/$(imageName):$(imageTag)
           displayName: Pull Image
-        # Show container status
-        - script: |
-            docker ps -a
-          displayName: Check Containers
 
-        # Show logs without failing pipeline
+        # Run container
+        - script: |
+            docker run -d --name ros-demo \
+              $(acrName)/$(imageName):$(imageTag)
+
+            sleep 15
+
+            docker ps -a
+          displayName: Start Container
+
+        # Show logs
         - script: |
             docker logs ros-demo || true
           displayName: Show Logs
 
         # Validate ROS2 output
         - script: |
-           echo "========== CONTAINERS =========="
-           docker ps -a
+            docker logs ros-demo > output.log 2>&1 || true
 
-           echo "========== LOGS =========="
-           docker logs ros-demo || true
+            echo "========== CONTAINER LOGS =========="
+            cat output.log
 
-           docker logs ros-demo > output.log 2>&1 || true
-           cat output.log
-
-           if grep -q "Hello, world!" output.log; then
-           echo "ROS2 publisher validation successful"
-           else
-           echo "ROS2 publisher validation failed"
-           exit 1
-           fi
+            if grep -q "Publishing" output.log; then
+              echo "ROS2 publisher validation successful"
+            else
+              echo "ROS2 publisher validation failed"
+              exit 1
+            fi
           displayName: Validate Publisher
 
-        # Save logs as artifact
-        -  script: |
+        # Save logs
+        - script: |
             docker logs ros-demo > publisher.log 2>&1 || true
-           displayName: Save Logs
+          displayName: Save Logs
 
+        # Publish logs artifact
         - task: PublishBuildArtifacts@1
           displayName: Publish Logs Artifact
           inputs:
-                PathtoPublish: publisher.log
-                ArtifactName: ros2-logs
+            PathtoPublish: publisher.log
+            ArtifactName: ros2-logs
 
 # =========================================================
 # STAGE 3 — DEPLOY TO AKS
