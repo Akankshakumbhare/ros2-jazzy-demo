@@ -86,3 +86,21 @@ provider "helm" {
     cluster_ca_certificate = base64decode(azurerm_kubernetes_cluster.aks.kube_config[0].cluster_ca_certificate)
   }
 }
+
+resource "helm_release" "cert_manager" {
+  name             = "cert-manager"
+  namespace        = "cert-manager"
+  create_namespace = true
+
+  repository = "https://charts.jetstack.io"
+  chart      = "cert-manager"
+
+  set {
+    name  = "crds.enabled"
+    value = "true"
+  }
+
+  depends_on = [
+    azurerm_kubernetes_cluster.aks
+  ]
+}
