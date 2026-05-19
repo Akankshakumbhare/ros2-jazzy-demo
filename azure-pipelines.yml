@@ -1,6 +1,5 @@
-
 trigger:
-- main
+  - main
 
 pool:
   vmImage: ubuntu-24.04
@@ -8,168 +7,200 @@ pool:
 variables:
   imageName: ros2-jazzy-demo
   acrName: ros2registry.azurecr.io
-  tag: $(Build.BuildId)
+  imageTag: $(Build.BuildId)
+  namespace: production
+
+# =========================================================
+# STAGE 1 — BUILD + SECURITY SCAN
+# =========================================================
 
 stages:
 
-# =========================================================
-# STAGE 1 — BUILD TEST PUSH
-# =========================================================
-
-- stage: Build_Test
-  displayName: Build Test and Push
+- stage: Build_Scan
+  displayName: Build and Security Scan
 
   jobs:
+    - job: BuildDocker
+      displayName: Build Push Scan
 
-  - job: BuildDocker
-    displayName: Build Docker Image
+      steps:
+        - checkout: self
 
-    steps:
+        # Build and push image
+        - task: Docker@2
+          displayName: Build and Push Image
+          inputs:
+            command: buildAndPush
+            repository: $(imageName)
+            Dockerfile: Dockerfile
+            containerRegistry: acr-service-connection
+            tags: |
+              $(imageTag)
+              latest
 
-    - checkout: self
+        - script: docker images
+          displayName: List Docker Images
 
-    # Build and Push Docker image
-    - task: Docker@2
-      displayName: Build and Push Image
+        # Install Trivy
+        - script: |
+            sudo apt-get update
+            sudo apt-get install -y wget apt-transport-https gnupg lsb-release
 
-      inputs:
-        command: buildAndPush
-        repository: $(imageName)
-        Dockerfile: Dockerfile
-        containerRegistry: acr-service-connection
+            wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | sudo apt-key add -
 
-        tags: |
-          $(tag)
-          latest
+            echo "deb https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main" | \
+            sudo tee /etc/apt/sources.list.d/trivy.list
 
-    # Verify built images
-    - script: |
-        docker images
+            sudo apt-get update
+            sudo apt-get install -y trivy
 
-      displayName: List Docker Images
+            trivy --version
+          displayName: Install Trivy
 
-    - script: |
-         sudo apt-get update
-         sudo apt-get install -y wget apt-transport-https gnupg lsb-release
+        - task: Docker@2
+          displayName: Login to ACR
+          inputs:
+            command: login
+            containerRegistry: acr-service-connection
 
-         wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | sudo apt-key add -
+        # Security scan
+        - script: |
+            trivy image \
+              --timeout 10m \
+              --severity HIGH,CRITICAL \
+              --exit-code 1 \
+              --no-progress \
+              $(acrName)/$(imageName):$(imageTag)
+          displayName: Trivy Security Scan
 
-         echo "deb https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main" | \
-         sudo tee /etc/apt/sources.list.d/trivy.list
+        # Generate report
+        - script: |
+            trivy image \
+              --format json \
+              --output trivy-report.json \
+              $(acrName)/$(imageName):$(imageTag)
+          displayName: Generate Trivy Report
 
-         sudo apt-get update
-         sudo apt-get install -y trivy
-
-         trivy --version
-      displayName: Install Trivy
-
-    - task: Docker@2
-      displayName: Login to ACR
-
-      inputs:
-        command: login
-        containerRegistry: acr-service-connection
-
-    - script: |
-        trivy image \
-          --severity HIGH,CRITICAL \
-          --exit-code 1 \
-          --no-progress \
-          $(acrName)/$(imageName):$(tag)
-
-      displayName: Trivy Security Scan
-
-    - script: |
-        trivy image \
-          --format json \
-          --output trivy-report.json \
-          $(acrName)/$(imageName):$(tag)
-
-      displayName: Generate Trivy Report
-
-    - task: PublishBuildArtifacts@1
-      displayName: Publish Trivy Report
-      inputs:
-        PathtoPublish: trivy-report.json
-        ArtifactName: trivy-report
-
-
-    # Start ROS2 container
-    - script: |
-        docker run -d --name ros-demo $(acrName)/$(imageName):$(tag)
-
-        sleep 15
-
-      displayName: Start Container
-
-    # Verify container exists
-    - script: |
-        docker ps -a
-
-      displayName: Check Containers
-
-    # Show logs
-    - script: |
-        docker logs ros-demo
-
-      displayName: Show Logs
-
-    # Validate publisher
-    - script: |
-
-        docker logs ros-demo > output.log 2>&1
-
-        cat output.log
-
-        if grep -q "Hello, world!" output.log; then
-          echo "ROS2 publisher validation successful"
-        else
-          echo "ROS2 publisher validation failed"
-          exit 1
-        fi
-
-      displayName: Validate Publisher
-
-    # Save logs
-    - script: |
-        docker logs ros-demo > publisher.log 2>&1
-
-      displayName: Save Logs
-
-    # Publish artifact
-    - task: PublishBuildArtifacts@1
-      displayName: Publish Logs Artifact
-
-      inputs:
-        PathtoPublish: publisher.log
-        ArtifactName: ros2-logs
-
+        - task: PublishBuildArtifacts@1
+          displayName: Publish Trivy Report
+          inputs:
+            PathtoPublish: trivy-report.json
+            ArtifactName: trivy-report
 
 # =========================================================
-# STAGE 2 — DEPLOY TO AKS
+# STAGE 2 — RUNTIME VALIDATION
+# =========================================================
+
+- stage: Validate_Runtime
+  displayName: Runtime Validation
+  dependsOn: Build_Scan
+  condition: succeeded()
+
+  jobs:
+    - job: ValidateContainer
+      displayName: Validate ROS2 Runtime
+
+      steps:
+        - checkout: self
+
+        - script: |
+            docker run -d --name ros-demo \
+            $(acrName)/$(imageName):$(imageTag)
+
+            sleep 20
+          displayName: Start Container
+
+        - script: docker ps -a
+          displayName: Check Containers
+
+        - script: docker logs ros-demo
+          displayName: Show Logs
+
+        - script: |
+            docker logs ros-demo > output.log 2>&1
+
+            cat output.log
+
+            if grep -q "Hello, world!" output.log; then
+              echo "ROS2 publisher validation successful"
+            else
+              echo "ROS2 publisher validation failed"
+              exit 1
+            fi
+          displayName: Validate Publisher
+
+        - script: docker logs ros-demo > publisher.log 2>&1
+          displayName: Save Logs
+
+        - task: PublishBuildArtifacts@1
+          displayName: Publish Logs Artifact
+          inputs:
+            PathtoPublish: publisher.log
+            ArtifactName: ros2-logs
+
+# =========================================================
+# STAGE 3 — DEPLOY TO AKS
 # =========================================================
 
 - stage: Deploy_AKS
-  displayName: Deploy to AKS
-
-  dependsOn: Build_Test
+  displayName: Deploy to Production
+  dependsOn: Validate_Runtime
+  condition: succeeded()
 
   jobs:
+    - deployment: DeployToAKS
+      displayName: Production Deployment
+      environment: production
 
-  - job: Deploy
-    displayName: Kubernetes Deployment
+      strategy:
+        runOnce:
+          deploy:
 
-    steps:
+            steps:
+              - checkout: self
 
-    - checkout: self
+              - task: KubernetesManifest@1
+                displayName: Deploy to AKS
+                inputs:
+                  action: deploy
+                  kubernetesServiceConnection: aks-service-connection
+                  namespace: $(namespace)
+                  manifests: |
+                    k8s/deployment.yaml
+                  containers: |
+                    $(acrName)/$(imageName):$(imageTag)
 
-    - task: KubernetesManifest@1
-      displayName: Deploy to AKS
-      inputs:
-        action: deploy
-        kubernetesServiceConnection: aks-service-connection
-        manifests: |
-          k8s/deployment.yaml
-        containers: |
-          $(acrName)/$(imageName):$(tag)
+              # Verify rollout
+              - script: |
+                  kubectl rollout status deployment/ros2-jazzy-demo \
+                  -n $(namespace) \
+                  --timeout=300s
+                displayName: Verify Rollout
 
+              # Validate pods
+              - script: |
+                  kubectl get pods -n $(namespace)
+                  kubectl get svc -n $(namespace)
+                displayName: Validate Deployment
+
+# =========================================================
+# STAGE 4 — AUTO ROLLBACK
+# =========================================================
+
+- stage: Rollback
+  displayName: Automatic Rollback
+  dependsOn: Deploy_AKS
+  condition: failed()
+
+  jobs:
+    - job: RollbackJob
+      displayName: Rollback Deployment
+
+      steps:
+        - script: |
+            kubectl rollout undo deployment/ros2-jazzy-demo \
+            -n production
+
+            kubectl rollout status deployment/ros2-jazzy-demo \
+            -n production
+          displayName: Rollback to Previous Stable Version
