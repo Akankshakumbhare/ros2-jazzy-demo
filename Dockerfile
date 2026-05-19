@@ -1,4 +1,4 @@
-FROM ros:jazzy-ros-base
+FROM prodacr001.azurecr.io/ros:jazzy-ros-base
 
 LABEL maintainer="Akanksha"
 LABEL description="ROS2 Jazzy CI/CD Demo"
