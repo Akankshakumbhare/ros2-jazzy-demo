@@ -1,0 +1,5 @@
+location            = "East US"
+resource_group_name = "rg-prod-aks"
+aks_name            = "prod-aks"
+acr_name            = "prodacr001"
+law_name            = "prod-law"

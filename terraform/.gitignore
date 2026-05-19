@@ -1,0 +1,16 @@
+# Terraform
+**/.terraform/*
+**/*.tfstate
+**/*.tfstate.*
+*.tfvars
+
+# Environment / secrets
+.env
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
