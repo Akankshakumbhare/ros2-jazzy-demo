@@ -106,7 +106,7 @@ stages:
 
         - script: |
            docker pull $(acrName)/$(imageName):$(imageTag)
-           displayName: Pull Image
+          displayName: Pull Image
         # Show container status
         - script: |
             docker ps -a
@@ -137,15 +137,15 @@ stages:
           displayName: Validate Publisher
 
         # Save logs as artifact
-        - script: |
+        -  script: |
             docker logs ros-demo > publisher.log 2>&1 || true
-            displayName: Save Logs
+           displayName: Save Logs
 
-            - task: PublishBuildArtifacts@1
-             displayName: Publish Logs Artifact
-             inputs:
-            PathtoPublish: publisher.log
-            ArtifactName: ros2-logs
+        - task: PublishBuildArtifacts@1
+          displayName: Publish Logs Artifact
+          inputs:
+                PathtoPublish: publisher.log
+                ArtifactName: ros2-logs
 
 # =========================================================
 # STAGE 3 — DEPLOY TO AKS
