@@ -107,7 +107,9 @@ stages:
         - script: docker ps -a
           displayName: Check Containers
 
-        - script: docker logs ros-demo
+        - script: 
+            docker ps -a
+            docker logs ros-demo || true
           displayName: Show Logs
 
         - script: |
