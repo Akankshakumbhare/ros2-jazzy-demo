@@ -65,23 +65,27 @@ stages:
         trivy --version
       displayName: Install Trivy
 
-        # Replace the az acr login with Docker login
-    - task: Docker@2
-      displayName: Login to ACR for Scan
-      inputs:
-        command: login
-        containerRegistry: $(dockerRegistryServiceConnection)
-
-    # Pull the image locally
-    - script: |
-        docker pull $(acrName)/$(imageName):$(imageTag)
+    - task: AzureCLI@2
       displayName: Pull Image for Scan
+      inputs:
+        azureSubscription: $(kubernetesServiceConnection)
+        scriptType: bash
+        scriptLocation: inlineScript
+        inlineScript: |
+          echo "Logging into ACR..."
+          az acr login --name $(acrName)
+          
+          echo "Pulling image $(acrName)/$(imageName):$(imageTag)..."
+          docker pull $(acrName)/$(imageName):$(imageTag)
+          
+          echo "Verifying image..."
+          docker images | grep $(imageName)
 
-    # Security Scan (now works with local image)
+    # Security Scan
     - script: |
         trivy image \
           --timeout 10m \
-          --severity CRITICAL \
+          --severity HIGH,CRITICAL \
           --exit-code 1 \
           --no-progress \
           $(acrName)/$(imageName):$(imageTag)
@@ -101,6 +105,7 @@ stages:
       inputs:
         PathtoPublish: trivy-report.json
         ArtifactName: trivy-report
+    
 # =========================================================
 # STAGE 2 — RUNTIME VALIDATION
 # =========================================================
