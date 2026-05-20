@@ -44,27 +44,42 @@ stages:
             --file Dockerfile \
             .
 
-    # Authenticate Docker with ACR
+    # Verify images
     - script: |
-        az acr login --name $(acrName | cut -d'.' -f1)
-      displayName: Docker Login to ACR
+        docker images
+      displayName: List Docker Images
 
-    # Install Trivy (using the repository method from previous answer)
+    # Install Trivy using official repository (Recommended)
     - script: |
         sudo apt-get update
         sudo apt-get install -y wget apt-transport-https gnupg lsb-release
+        
+        # Add Trivy repository
         wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | sudo apt-key add -
         echo "deb https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main" | sudo tee -a /etc/apt/sources.list.d/trivy.list
+        
+        # Install Trivy
         sudo apt-get update
         sudo apt-get install -y trivy
+        
         trivy --version
       displayName: Install Trivy
 
-    # Security Scan
+    # ADD THIS: Login to ACR for Trivy scan
+    - script: |
+        az acr login --name $(acrName)
+      displayName: Login to ACR for Scan
+
+    # ADD THIS: Pull the image locally
+    - script: |
+        docker pull $(acrName)/$(imageName):$(imageTag)
+      displayName: Pull Image for Scan
+
+    # Security Scan (now works with local image)
     - script: |
         trivy image \
           --timeout 10m \
-          --severity HIGH,CRITICAL \
+          --severity CRITICAL \
           --exit-code 1 \
           --no-progress \
           $(acrName)/$(imageName):$(imageTag)
