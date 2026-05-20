@@ -106,6 +106,7 @@ stages:
         PathtoPublish: trivy-report.json
         ArtifactName: trivy-report
     
+
 # =========================================================
 # STAGE 2 — RUNTIME VALIDATION
 # =========================================================
@@ -120,27 +121,31 @@ stages:
 
     steps:
 
-    # Login to ACR
-    - task: Docker@2
-      displayName: Login to ACR
+    # Pull and run using AzureCLI (handles authentication)
+    - task: AzureCLI@2
+      displayName: Pull and Run Container
       inputs:
-        command: login
-        containerRegistry: $(dockerRegistryServiceConnection)
-
-    # Pull built image
-    - script: |
-        docker pull $(acrName)/$(imageName):$(imageTag)
-      displayName: Pull Image
-
-    # Run container
-    - script: |
-        docker run -d --name ros-demo \
-          $(acrName)/$(imageName):$(imageTag)
-
-        sleep 20
-
-        docker ps -a
-      displayName: Start Container
+        azureSubscription: $(kubernetesServiceConnection)
+        scriptType: bash
+        scriptLocation: inlineScript
+        inlineScript: |
+          # Login to ACR
+          echo "Logging into ACR..."
+          az acr login --name $(acrName)
+          
+          # Pull the image
+          echo "Pulling image $(acrName)/$(imageName):$(imageTag)..."
+          docker pull $(acrName)/$(imageName):$(imageTag)
+          
+          # Run container
+          echo "Starting container..."
+          docker run -d --name ros-demo $(acrName)/$(imageName):$(imageTag)
+          
+          # Wait for container to initialize
+          sleep 20
+          
+          # Show running containers
+          docker ps -a
 
     # Validate ROS2 publisher
     - script: |
@@ -159,8 +164,8 @@ stages:
 
     # Clean up container
     - script: |
-        docker stop ros-demo
-        docker rm ros-demo
+        docker stop ros-demo || true
+        docker rm ros-demo || true
       displayName: Clean Up Container
       condition: always()
 
