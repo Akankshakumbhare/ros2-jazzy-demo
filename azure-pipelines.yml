@@ -23,29 +23,29 @@ stages:
       displayName: Build Push Scan
 
       steps:
-      - checkout: self
+        - checkout: self
 
-      - task: Docker@2
-        displayName: Login to ACR
-        inputs:
-         command: login
-         containerRegistry: prodacr001-manual
+        - task: Docker@2
+          displayName: Login to ACR
+          inputs:
+            command: login
+            containerRegistry: prodacr001-manual
 
-      - task: Docker@2
-        displayName: Build and Push Image
-        inputs:
-         command: buildAndPush
-         repository: $(imageName)
-         Dockerfile: Dockerfile
-         containerRegistry: prodacr001-manual
-         tags: |
-          $(imageTag)
-          latest
+        - task: Docker@2
+          displayName: Build and Push Image
+          inputs:
+            command: buildAndPush
+            repository: $(imageName)
+            Dockerfile: Dockerfile
+            containerRegistry: prodacr001-manual
+            tags: |
+              $(imageTag)
+              latest
 
-      - script: docker images
-        displayName: List Docker Images
+        - script: docker images
+          displayName: List Docker Images
 
-      - script: |
+        - script: |
             sudo apt-get update
             sudo apt-get install -y wget apt-transport-https gnupg lsb-release
 
@@ -58,35 +58,30 @@ stages:
             sudo apt-get install -y trivy
 
             trivy --version
-        displayName: Install Trivy
+          displayName: Install Trivy
 
-      - task: Docker@2
-        displayName: Login to ACR
-        inputs:
-            command: login
-            containerRegistry: prodacr001-manual
-
-      - script: |
+        - script: |
             trivy image \
               --timeout 10m \
               --severity CRITICAL \
               --exit-code 1 \
               --no-progress \
               $(acrName)/$(imageName):$(imageTag)
-        displayName: Trivy Security Scan
+          displayName: Trivy Security Scan
 
-      - script: |
+        - script: |
             trivy image \
               --format json \
               --output trivy-report.json \
               $(acrName)/$(imageName):$(imageTag)
-        displayName: Generate Trivy Report
+          displayName: Generate Trivy Report
 
-      - task: PublishBuildArtifacts@1
-        displayName: Publish Trivy Report
-        inputs:
+        - task: PublishBuildArtifacts@1
+          displayName: Publish Trivy Report
+          inputs:
             PathtoPublish: trivy-report.json
             ArtifactName: trivy-report
+
 
 # =========================================================
 # STAGE 2 — RUNTIME VALIDATION
@@ -103,34 +98,28 @@ stages:
       steps:
         - checkout: self
 
-        # Login to ACR
         - task: Docker@2
           displayName: Login to ACR
           inputs:
             command: login
             containerRegistry: prodacr001-manual
 
-        # Pull image from ACR
         - script: |
             docker pull $(acrName)/$(imageName):$(imageTag)
           displayName: Pull Image
 
-        # Run container
         - script: |
             docker run -d --name ros-demo \
               $(acrName)/$(imageName):$(imageTag)
 
             sleep 15
-
             docker ps -a
           displayName: Start Container
 
-        # Show logs
         - script: |
             docker logs ros-demo || true
           displayName: Show Logs
 
-        # Validate ROS2 output
         - script: |
             docker logs ros-demo > output.log 2>&1 || true
 
@@ -145,17 +134,16 @@ stages:
             fi
           displayName: Validate Publisher
 
-        # Save logs
         - script: |
             docker logs ros-demo > publisher.log 2>&1 || true
           displayName: Save Logs
 
-        # Publish logs artifact
         - task: PublishBuildArtifacts@1
           displayName: Publish Logs Artifact
           inputs:
             PathtoPublish: publisher.log
             ArtifactName: ros2-logs
+
 
 # =========================================================
 # STAGE 3 — DEPLOY TO AKS
@@ -176,7 +164,7 @@ stages:
             steps:
               - checkout: self
 
-              # Create namespace first
+              # Create namespace
               - task: KubernetesManifest@1
                 displayName: Create Namespace
                 inputs:
@@ -188,9 +176,9 @@ stages:
                   manifests: |
                     k8s/namespace.yaml
 
-              # Deploy application
+              # Deploy app + service + ingress
               - task: KubernetesManifest@1
-                displayName: Deploy to AKS
+                displayName: Deploy Application
                 inputs:
                   action: deploy
                   connectionType: azureResourceManager
@@ -205,16 +193,51 @@ stages:
                   containers: |
                     $(acrName)/$(imageName):$(imageTag)
 
-              - script: |
-                  kubectl rollout status deployment/ros2-jazzy-demo \
-                    -n $(namespace) \
-                    --timeout=300s
-                displayName: Verify Rollout
+              # Verify deployment
+              - task: Kubernetes@1
+                displayName: Verify Pods
+                inputs:
+                  connectionType: Azure Resource Manager
+                  azureSubscriptionEndpoint: aks-service-connection
+                  azureResourceGroup: rg-prod-aks
+                  kubernetesCluster: prod-aks
+                  command: get
+                  arguments: pods -n $(namespace)
 
-              - script: |
-                  kubectl get pods -n $(namespace)
-                  kubectl get svc -n $(namespace)
-                displayName: Validate Deployment
+              # Verify service
+              - task: Kubernetes@1
+                displayName: Verify Service
+                inputs:
+                  connectionType: Azure Resource Manager
+                  azureSubscriptionEndpoint: aks-service-connection
+                  azureResourceGroup: rg-prod-aks
+                  kubernetesCluster: prod-aks
+                  command: get
+                  arguments: svc -n $(namespace)
+
+              # Verify ingress
+              - task: Kubernetes@1
+                displayName: Verify Ingress
+                inputs:
+                  connectionType: Azure Resource Manager
+                  azureSubscriptionEndpoint: aks-service-connection
+                  azureResourceGroup: rg-prod-aks
+                  kubernetesCluster: prod-aks
+                  command: get
+                  arguments: ingress -n $(namespace)
+
+              # Verify certificate
+              - task: Kubernetes@1
+                displayName: Verify TLS Certificate
+                inputs:
+                  connectionType: Azure Resource Manager
+                  azureSubscriptionEndpoint: aks-service-connection
+                  azureResourceGroup: rg-prod-aks
+                  kubernetesCluster: prod-aks
+                  command: get
+                  arguments: certificate -n $(namespace)
+
+
 # =========================================================
 # STAGE 4 — AUTO ROLLBACK
 # =========================================================
