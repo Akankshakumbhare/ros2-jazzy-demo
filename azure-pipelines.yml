@@ -29,7 +29,7 @@ stages:
     steps:
     - checkout: self
 
-    # Build and Push using ACR Task (handles authentication automatically)
+    # Build and Push using ACR Task
     - task: AzureCLI@2
       displayName: Build and Push to ACR
       inputs:
@@ -44,22 +44,19 @@ stages:
             --file Dockerfile \
             .
 
-    # Verify images
+    # Authenticate Docker with ACR
     - script: |
-        docker images
-      displayName: List Docker Images
+        az acr login --name $(acrName | cut -d'.' -f1)
+      displayName: Docker Login to ACR
 
-    # Install Trivy
+    # Install Trivy (using the repository method from previous answer)
     - script: |
         sudo apt-get update
         sudo apt-get install -y wget apt-transport-https gnupg lsb-release
-        
-        # Add Trivy repository and install
         wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | sudo apt-key add -
         echo "deb https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main" | sudo tee -a /etc/apt/sources.list.d/trivy.list
         sudo apt-get update
         sudo apt-get install -y trivy
-        
         trivy --version
       displayName: Install Trivy
 
