@@ -169,9 +169,7 @@ stages:
           deploy:
             steps:
               - checkout: self
-              - script: |
-                  kubectl create namespace $(namespace) --dry-run=client -o yaml | kubectl apply -f -
-                displayName: Create Namespace
+              
 
               - task: KubernetesManifest@1
                 displayName: Deploy to AKS
@@ -183,7 +181,9 @@ stages:
                   kubernetesCluster: prod-aks
                   namespace: $(namespace)
                   manifests: |
+                    k8s/namespace.yaml
                     k8s/deployment.yaml
+
                   containers: |
                     $(acrName)/$(imageName):$(imageTag)
 
