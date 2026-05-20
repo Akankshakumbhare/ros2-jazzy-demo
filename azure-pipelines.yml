@@ -19,7 +19,6 @@ variables:
 # STAGE 1 — BUILD + PUSH + SECURITY SCAN
 # =========================================================
 stages:
-
 - stage: Build_Scan
   displayName: Build and Security Scan
 
@@ -30,40 +29,20 @@ stages:
     steps:
     - checkout: self
 
-    # Login to ACR
-    - task: Docker@2
-      displayName: Login to ACR
+    # Build and Push using ACR Task (handles authentication automatically)
+    - task: AzureCLI@2
+      displayName: Build and Push to ACR
       inputs:
-        command: login
-        containerRegistry: $(dockerRegistryServiceConnection)
-
-    # Build Image
-    - task: Docker@2
-      displayName: Build Image
-      inputs:
-        command: build
-        repository: $(imageName)
-        containerRegistry: $(dockerRegistryServiceConnection)
-        tags: $(imageTag)
-        arguments: '--pull'
-        Dockerfile: Dockerfile    
-    # Push Image
-    - task: Docker@2
-      displayName: Push Image
-      inputs:
-        command: push
-        repository: $(imageName)
-        containerRegistry: $(dockerRegistryServiceConnection)
-        tags: $(imageTag)
-
-    # Push Latest Tag
-    - task: Docker@2
-      displayName: Push Latest Tag
-      inputs:
-        command: push
-        repository: $(imageName)
-        containerRegistry: $(dockerRegistryServiceConnection)
-        tags: latest
+        azureSubscription: $(kubernetesServiceConnection)
+        scriptType: bash
+        scriptLocation: inlineScript
+        inlineScript: |
+          az acr build \
+            --registry $(acrName) \
+            --image $(imageName):$(imageTag) \
+            --image $(imageName):latest \
+            --file Dockerfile \
+            .
 
     # Verify images
     - script: |
@@ -74,11 +53,8 @@ stages:
     - script: |
         sudo apt-get update
         sudo apt-get install -y wget
-
         wget https://github.com/aquasecurity/trivy/releases/latest/download/trivy_0.63.0_Linux-64bit.deb
-
         sudo dpkg -i trivy_0.63.0_Linux-64bit.deb
-
         trivy --version
       displayName: Install Trivy
 
@@ -106,7 +82,6 @@ stages:
       inputs:
         PathtoPublish: trivy-report.json
         ArtifactName: trivy-report
-
 # =========================================================
 # STAGE 2 — RUNTIME VALIDATION
 # =========================================================
