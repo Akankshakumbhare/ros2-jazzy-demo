@@ -21,7 +21,7 @@ spec:
 
       - name: ros2-publisher
 
-        image: ros2registry.azurecr.io/ros2-jazzy-demo:latest
+        image: prodacr001.azurecr.io/ros2-jazzy-demo
 
         imagePullPolicy: Always
 
