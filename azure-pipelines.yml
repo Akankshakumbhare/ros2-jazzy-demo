@@ -169,6 +169,33 @@ stages:
           deploy:
             steps:
               - checkout: self
+            
+            # Step 1: Create namespace
+              - task: KubernetesManifest@1
+                displayName: Create Namespace
+                inputs:
+                 action: deploy
+                 connectionType: azureResourceManager
+                 azureSubscriptionConnection: aks-service-connection
+                 azureResourceGroup: rg-prod-aks
+                 kubernetesCluster: prod-aks
+                 manifests: |
+                    k8s/namespace.yaml
+
+  # Step 2: Deploy app into that namespace
+              - task: KubernetesManifest@1
+                displayName: Deploy to AKS
+                inputs:
+                    action: deploy
+                    connectionType: azureResourceManager
+                    azureSubscriptionConnection: aks-service-connection
+                    azureResourceGroup: rg-prod-aks
+                    kubernetesCluster: prod-aks
+                    namespace: $(namespace)
+                    manifests: |
+                     k8s/deployment.yaml
+                    containers: |
+                     $(acrName)/$(imageName):$(imageTag)
               
 
               - task: KubernetesManifest@1
