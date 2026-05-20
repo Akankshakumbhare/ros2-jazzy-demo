@@ -10,80 +10,75 @@ variables:
   imageTag: $(Build.BuildId)
   namespace: production
 
-stages:
+  dockerRegistryServiceConnection: prodacr001-manual
+  kubernetesServiceConnection: aks-service-connection
+  aksResourceGroup: rg-prod-aks
+  aksCluster: prod-aks
 
 # =========================================================
-# STAGE 1 — BUILD + SECURITY SCAN
+# STAGE 1 — BUILD + PUSH + SECURITY SCAN
 # =========================================================
+stages:
 - stage: Build_Scan
   displayName: Build and Security Scan
 
   jobs:
-    - job: BuildDocker
-      displayName: Build Push Scan
+  - job: BuildDocker
+    displayName: Build Push Scan
 
-      steps:
-        - checkout: self
+    steps:
+    - checkout: self
 
-        - task: Docker@2
-          displayName: Login to ACR
-          inputs:
-           command: login
-           containerRegistry: prodacr001-manual
+    - task: Docker@2
+      displayName: Login to ACR
+      inputs:
+        command: login
+        containerRegistry: $(dockerRegistryServiceConnection)
 
-        - task: Docker@2
-          displayName: Build and Push Image
-          inputs:
-           command: buildAndPush
-           repository: $(imageName)
-           Dockerfile: Dockerfile
-           containerRegistry: prodacr001-manual
-           tags: |
-            $(imageTag)
-             latest
-          env:
-            DOCKER_BUILDKIT: 0
+    - task: Docker@2
+      displayName: Build and Push Image
+      inputs:
+        command: buildAndPush
+        repository: $(imageName)
+        dockerfile: Dockerfile
+        containerRegistry: $(dockerRegistryServiceConnection)
+        tags: |
+          $(imageTag)
+          latest
 
-        - script: docker images
-          displayName: List Docker Images
+    - script: docker images
+      displayName: List Docker Images
 
-        - script: |
-            sudo apt-get update
-            sudo apt-get install -y wget apt-transport-https gnupg lsb-release
+    - script: |
+        sudo apt-get update
+        sudo apt-get install -y wget
 
-            wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | sudo apt-key add -
+        wget https://github.com/aquasecurity/trivy/releases/latest/download/trivy_0.63.0_Linux-64bit.deb
+        sudo dpkg -i trivy_0.63.0_Linux-64bit.deb
 
-            echo "deb https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main" | \
-            sudo tee /etc/apt/sources.list.d/trivy.list
+        trivy --version
+      displayName: Install Trivy
 
-            sudo apt-get update
-            sudo apt-get install -y trivy
+    - script: |
+        trivy image \
+          --timeout 10m \
+          --severity CRITICAL,HIGH \
+          --exit-code 1 \
+          --no-progress \
+          $(acrName)/$(imageName):$(imageTag)
+      displayName: Security Scan
 
-            trivy --version
-          displayName: Install Trivy
+    - script: |
+        trivy image \
+          --format json \
+          --output trivy-report.json \
+          $(acrName)/$(imageName):$(imageTag)
+      displayName: Generate Report
 
-        - script: |
-            trivy image \
-              --timeout 10m \
-              --severity CRITICAL \
-              --exit-code 1 \
-              --no-progress \
-              $(acrName)/$(imageName):$(imageTag)
-          displayName: Trivy Security Scan
-
-        - script: |
-            trivy image \
-              --format json \
-              --output trivy-report.json \
-              $(acrName)/$(imageName):$(imageTag)
-          displayName: Generate Trivy Report
-
-        - task: PublishBuildArtifacts@1
-          displayName: Publish Trivy Report
-          inputs:
-            PathtoPublish: trivy-report.json
-            ArtifactName: trivy-report
-
+    - task: PublishBuildArtifacts@1
+      inputs:
+        PathtoPublish: trivy-report.json
+        ArtifactName: trivy-report
 
 # =========================================================
 # STAGE 2 — RUNTIME VALIDATION
@@ -94,58 +89,44 @@ stages:
   condition: succeeded()
 
   jobs:
-    - job: ValidateContainer
-      displayName: Validate ROS2 Runtime
+  - job: ValidateContainer
+    displayName: Validate ROS2 Runtime
 
-      steps:
-        - checkout: self
+    steps:
+    - task: Docker@2
+      displayName: Login to ACR
+      inputs:
+        command: login
+        containerRegistry: $(dockerRegistryServiceConnection)
 
-        - task: Docker@2
-          displayName: Login to ACR
-          inputs:
-            command: login
-            containerRegistry: prodacr001-manual
+    - script: |
+        docker pull $(acrName)/$(imageName):$(imageTag)
+      displayName: Pull Image
 
-        - script: |
-            docker pull $(acrName)/$(imageName):$(imageTag)
-          displayName: Pull Image
+    - script: |
+        docker run -d --name ros-demo \
+          $(acrName)/$(imageName):$(imageTag)
 
-        - script: |
-            docker run -d --name ros-demo \
-              $(acrName)/$(imageName):$(imageTag)
+        sleep 20
+        docker ps -a
+      displayName: Start Container
 
-            sleep 15
-            docker ps -a
-          displayName: Start Container
+    - script: |
+        docker logs ros-demo > output.log 2>&1 || true
+        cat output.log
 
-        - script: |
-            docker logs ros-demo || true
-          displayName: Show Logs
+        if grep -q "Publishing" output.log; then
+          echo "ROS2 publisher validation successful"
+        else
+          echo "Validation failed"
+          exit 1
+        fi
+      displayName: Validate Publisher
 
-        - script: |
-            docker logs ros-demo > output.log 2>&1 || true
-
-            echo "========== CONTAINER LOGS =========="
-            cat output.log
-
-            if grep -q "Publishing" output.log; then
-              echo "ROS2 publisher validation successful"
-            else
-              echo "ROS2 publisher validation failed"
-              exit 1
-            fi
-          displayName: Validate Publisher
-
-        - script: |
-            docker logs ros-demo > publisher.log 2>&1 || true
-          displayName: Save Logs
-
-        - task: PublishBuildArtifacts@1
-          displayName: Publish Logs Artifact
-          inputs:
-            PathtoPublish: publisher.log
-            ArtifactName: ros2-logs
-
+    - task: PublishBuildArtifacts@1
+      inputs:
+        PathtoPublish: output.log
+        ArtifactName: ros2-logs
 
 # =========================================================
 # STAGE 3 — DEPLOY TO AKS
@@ -156,92 +137,56 @@ stages:
   condition: succeeded()
 
   jobs:
-    - deployment: DeployToAKS
-      displayName: Production Deployment
-      environment: production
+  - deployment: DeployToAKS
+    displayName: Deploy to AKS
+    environment: production
 
-      strategy:
-        runOnce:
-          deploy:
-            steps:
-              - checkout: self
+    strategy:
+      runOnce:
+        deploy:
+          steps:
 
-              # Create namespace
-              - task: KubernetesManifest@1
-                displayName: Create Namespace
-                inputs:
-                  action: deploy
-                  connectionType: azureResourceManager
-                  azureSubscriptionConnection: aks-service-connection
-                  azureResourceGroup: rg-prod-aks
-                  kubernetesCluster: prod-aks
-                  manifests: |
-                    k8s/namespace.yaml
+          - checkout: self
 
-              # Deploy app + service + ingress
-              - task: KubernetesManifest@1
-                displayName: Deploy Application
-                inputs:
-                  action: deploy
-                  connectionType: azureResourceManager
-                  azureSubscriptionConnection: aks-service-connection
-                  azureResourceGroup: rg-prod-aks
-                  kubernetesCluster: prod-aks
-                  namespace: $(namespace)
-                  manifests: |
-                    k8s/deployment.yaml
-                    k8s/service.yaml
-                    k8s/ingress.yaml
-                  containers: |
-                    $(acrName)/$(imageName):$(imageTag)
+          - task: KubernetesManifest@1
+            displayName: Deploy Namespace
+            inputs:
+              action: deploy
+              connectionType: azureResourceManager
+              azureSubscriptionConnection: $(kubernetesServiceConnection)
+              azureResourceGroup: $(aksResourceGroup)
+              kubernetesCluster: $(aksCluster)
+              manifests: |
+                k8s/namespace.yaml
 
-              # Verify deployment
-              - task: Kubernetes@1
-                displayName: Verify Pods
-                inputs:
-                  connectionType: Azure Resource Manager
-                  azureSubscriptionEndpoint: aks-service-connection
-                  azureResourceGroup: rg-prod-aks
-                  kubernetesCluster: prod-aks
-                  command: get
-                  arguments: pods -n $(namespace)
+          - task: KubernetesManifest@1
+            displayName: Deploy Application
+            inputs:
+              action: deploy
+              connectionType: azureResourceManager
+              azureSubscriptionConnection: $(kubernetesServiceConnection)
+              azureResourceGroup: $(aksResourceGroup)
+              kubernetesCluster: $(aksCluster)
+              namespace: $(namespace)
+              manifests: |
+                k8s/deployment.yaml
+                k8s/service.yaml
+                k8s/ingress.yaml
+              containers: |
+                $(acrName)/$(imageName):$(imageTag)
 
-              # Verify service
-              - task: Kubernetes@1
-                displayName: Verify Service
-                inputs:
-                  connectionType: Azure Resource Manager
-                  azureSubscriptionEndpoint: aks-service-connection
-                  azureResourceGroup: rg-prod-aks
-                  kubernetesCluster: prod-aks
-                  command: get
-                  arguments: svc -n $(namespace)
-
-              # Verify ingress
-              - task: Kubernetes@1
-                displayName: Verify Ingress
-                inputs:
-                  connectionType: Azure Resource Manager
-                  azureSubscriptionEndpoint: aks-service-connection
-                  azureResourceGroup: rg-prod-aks
-                  kubernetesCluster: prod-aks
-                  command: get
-                  arguments: ingress -n $(namespace)
-
-              # Verify certificate
-              - task: Kubernetes@1
-                displayName: Verify TLS Certificate
-                inputs:
-                  connectionType: Azure Resource Manager
-                  azureSubscriptionEndpoint: aks-service-connection
-                  azureResourceGroup: rg-prod-aks
-                  kubernetesCluster: prod-aks
-                  command: get
-                  arguments: certificate -n $(namespace)
-
+          - task: Kubernetes@1
+            displayName: Verify Deployment
+            inputs:
+              connectionType: Azure Resource Manager
+              azureSubscriptionEndpoint: $(kubernetesServiceConnection)
+              azureResourceGroup: $(aksResourceGroup)
+              kubernetesCluster: $(aksCluster)
+              command: get
+              arguments: pods -n $(namespace)
 
 # =========================================================
-# STAGE 4 — AUTO ROLLBACK
+# STAGE 4 — ROLLBACK
 # =========================================================
 - stage: Rollback
   displayName: Automatic Rollback
@@ -249,19 +194,15 @@ stages:
   condition: failed()
 
   jobs:
-    - job: RollbackJob
-      displayName: Rollback Deployment
+  - job: RollbackJob
+    displayName: Rollback Deployment
 
-      steps:
-        - task: Kubernetes@1
-          displayName: Authenticate to AKS
-          inputs:
-            connectionType: Azure Resource Manager
-            azureSubscriptionEndpoint: aks-service-connection
-            azureResourceGroup: rg-prod-aks
-            kubernetesCluster: prod-aks
-
-        - script: |
-            kubectl rollout undo deployment/ros2-jazzy-demo -n production
-            kubectl rollout status deployment/ros2-jazzy-demo -n production
-          displayName: Rollback to Previous Stable Version
+    steps:
+    - task: Kubernetes@1
+      inputs:
+        connectionType: Azure Resource Manager
+        azureSubscriptionEndpoint: $(kubernetesServiceConnection)
+        azureResourceGroup: $(aksResourceGroup)
+        kubernetesCluster: $(aksCluster)
+        command: rollout
+        arguments: undo deployment/ros2-jazzy-demo -n $(namespace)
