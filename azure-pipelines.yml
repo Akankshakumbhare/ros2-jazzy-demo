@@ -16,9 +16,10 @@ variables:
   aksCluster: prod-aks
 
 # =========================================================
-# STAGE 1 — BUILD + PUSH + SCAN
+# STAGE 1 — BUILD + PUSH + SECURITY SCAN
 # =========================================================
 stages:
+
 - stage: Build_Scan
   displayName: Build and Security Scan
 
@@ -36,18 +37,17 @@ stages:
         command: login
         containerRegistry: $(dockerRegistryServiceConnection)
 
-    # Pull private base image first
+    # Pull private base image
     - script: |
         docker pull $(acrName)/ros:jazzy-ros-base
       displayName: Pull Base Image
 
-    # Build and Push
-              # Build and Push
+    # Build and Push Docker Image
     - task: Docker@2
       displayName: Build and Push Image
       env:
         DOCKER_BUILDKIT: 0
-        inputs:  
+        inputs:
         command: buildAndPush
         repository: $(imageName)
         dockerfile: Dockerfile
@@ -57,7 +57,8 @@ stages:
           latest
 
     # Verify images
-    - script: docker images
+    - script: |
+        docker images
       displayName: List Docker Images
 
     # Install Trivy
@@ -66,12 +67,13 @@ stages:
         sudo apt-get install -y wget
 
         wget https://github.com/aquasecurity/trivy/releases/latest/download/trivy_0.63.0_Linux-64bit.deb
+
         sudo dpkg -i trivy_0.63.0_Linux-64bit.deb
 
         trivy --version
       displayName: Install Trivy
 
-    # Scan image
+    # Security Scan
     - script: |
         trivy image \
           --timeout 10m \
@@ -81,7 +83,7 @@ stages:
           $(acrName)/$(imageName):$(imageTag)
       displayName: Trivy Security Scan
 
-    # Generate report
+    # Generate JSON Report
     - script: |
         trivy image \
           --format json \
@@ -89,7 +91,7 @@ stages:
           $(acrName)/$(imageName):$(imageTag)
       displayName: Generate Trivy Report
 
-    # Publish report
+    # Publish Scan Report
     - task: PublishBuildArtifacts@1
       displayName: Publish Trivy Report
       inputs:
@@ -109,37 +111,47 @@ stages:
     displayName: Validate ROS2 Runtime
 
     steps:
+
+    # Login to ACR
     - task: Docker@2
       displayName: Login to ACR
       inputs:
         command: login
         containerRegistry: $(dockerRegistryServiceConnection)
 
+    # Pull built image
     - script: |
         docker pull $(acrName)/$(imageName):$(imageTag)
       displayName: Pull Image
 
+    # Run container
     - script: |
         docker run -d --name ros-demo \
           $(acrName)/$(imageName):$(imageTag)
 
         sleep 20
+
         docker ps -a
       displayName: Start Container
 
+    # Validate ROS2 publisher
     - script: |
         docker logs ros-demo > output.log 2>&1 || true
+
+        echo "========== CONTAINER LOGS =========="
         cat output.log
 
         if grep -q "Publishing" output.log; then
           echo "ROS2 publisher validation successful"
         else
-          echo "Validation failed"
+          echo "ROS2 publisher validation failed"
           exit 1
         fi
       displayName: Validate Publisher
 
+    # Publish logs
     - task: PublishBuildArtifacts@1
+      displayName: Publish Logs Artifact
       inputs:
         PathtoPublish: output.log
         ArtifactName: ros2-logs
@@ -164,8 +176,9 @@ stages:
 
           - checkout: self
 
+          # Create namespace
           - task: KubernetesManifest@1
-            displayName: Deploy Namespace
+            displayName: Create Namespace
             inputs:
               action: deploy
               connectionType: azureResourceManager
@@ -175,6 +188,7 @@ stages:
               manifests: |
                 k8s/namespace.yaml
 
+          # Deploy application
           - task: KubernetesManifest@1
             displayName: Deploy Application
             inputs:
@@ -191,8 +205,9 @@ stages:
               containers: |
                 $(acrName)/$(imageName):$(imageTag)
 
+          # Verify pods
           - task: Kubernetes@1
-            displayName: Verify Deployment
+            displayName: Verify Pods
             inputs:
               connectionType: Azure Resource Manager
               azureSubscriptionEndpoint: $(kubernetesServiceConnection)
@@ -201,8 +216,30 @@ stages:
               command: get
               arguments: pods -n $(namespace)
 
+          # Verify services
+          - task: Kubernetes@1
+            displayName: Verify Services
+            inputs:
+              connectionType: Azure Resource Manager
+              azureSubscriptionEndpoint: $(kubernetesServiceConnection)
+              azureResourceGroup: $(aksResourceGroup)
+              kubernetesCluster: $(aksCluster)
+              command: get
+              arguments: svc -n $(namespace)
+
+          # Verify ingress
+          - task: Kubernetes@1
+            displayName: Verify Ingress
+            inputs:
+              connectionType: Azure Resource Manager
+              azureSubscriptionEndpoint: $(kubernetesServiceConnection)
+              azureResourceGroup: $(aksResourceGroup)
+              kubernetesCluster: $(aksCluster)
+              command: get
+              arguments: ingress -n $(namespace)
+
 # =========================================================
-# STAGE 4 — ROLLBACK
+# STAGE 4 — AUTOMATIC ROLLBACK
 # =========================================================
 - stage: Rollback
   displayName: Automatic Rollback
@@ -214,7 +251,9 @@ stages:
     displayName: Rollback Deployment
 
     steps:
+
     - task: Kubernetes@1
+      displayName: Rollback Deployment
       inputs:
         connectionType: Azure Resource Manager
         azureSubscriptionEndpoint: $(kubernetesServiceConnection)
