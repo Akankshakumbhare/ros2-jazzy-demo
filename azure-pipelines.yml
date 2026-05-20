@@ -37,22 +37,15 @@ stages:
         command: login
         containerRegistry: $(dockerRegistryServiceConnection)
 
-    # Pull private base image
-    - script: |
-        docker pull $(acrName)/ros:jazzy-ros-base
-      displayName: Pull Base Image
-
     # Build and Push Docker Image
     - task: Docker@2
       displayName: Build and Push Image
-      env:
-        DOCKER_BUILDKIT: 0
-        inputs:
+      inputs:
         command: buildAndPush
         repository: $(imageName)
-        dockerfile: Dockerfile
+        Dockerfile: Dockerfile
         containerRegistry: $(dockerRegistryServiceConnection)
-        tags: |
+        tags: 
           $(imageTag)
           latest
 
@@ -173,7 +166,6 @@ stages:
       runOnce:
         deploy:
           steps:
-
           - checkout: self
 
           # Create namespace
@@ -251,7 +243,6 @@ stages:
     displayName: Rollback Deployment
 
     steps:
-
     - task: Kubernetes@1
       displayName: Rollback Deployment
       inputs:
