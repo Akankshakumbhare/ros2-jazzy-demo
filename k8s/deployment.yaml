@@ -30,23 +30,7 @@ spec:
             memory: "512Mi"
             cpu: "500m"
 
-        readinessProbe:
-            exec:
-                  command:
-                      - ros2
-                      - topic
-                      - list
-            initialDelaySeconds: 20
-            periodSeconds: 10
-
-        livenessProbe:
-             exec:
-                  command:
-                  - ros2
-                  - topic
-                  - list
-             initialDelaySeconds: 30
-             periodSeconds: 1
+        
   strategy:
     type: RollingUpdate
     rollingUpdate:

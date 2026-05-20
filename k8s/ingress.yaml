@@ -9,11 +9,11 @@ spec:
 
   tls:
     - hosts:
-        - ros2-demo.local
+        - 20.253.93.207.nip.io
       secretName: ros2-tls
 
   rules:
-    - host: ros2-demo.local
+    - host: 20.253.93.207.nip.io
 
       http:
         paths:
