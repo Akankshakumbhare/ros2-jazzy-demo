@@ -18,6 +18,7 @@ variables:
 # =========================================================
 # STAGE 1 — BUILD + PUSH + SCAN
 # =========================================================
+stages:
 - stage: Build_Scan
   displayName: Build and Security Scan
 
@@ -41,11 +42,12 @@ variables:
       displayName: Pull Base Image
 
     # Build and Push
+              # Build and Push
     - task: Docker@2
       displayName: Build and Push Image
       env:
         DOCKER_BUILDKIT: 0
-      inputs:
+        inputs:  
         command: buildAndPush
         repository: $(imageName)
         dockerfile: Dockerfile
