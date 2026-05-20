@@ -65,12 +65,14 @@ stages:
         trivy --version
       displayName: Install Trivy
 
-    # ADD THIS: Login to ACR for Trivy scan
-    - script: |
-        az acr login --name $(acrName)
+        # Replace the az acr login with Docker login
+    - task: Docker@2
       displayName: Login to ACR for Scan
+      inputs:
+        command: login
+        containerRegistry: $(dockerRegistryServiceConnection)
 
-    # ADD THIS: Pull the image locally
+    # Pull the image locally
     - script: |
         docker pull $(acrName)/$(imageName):$(imageTag)
       displayName: Pull Image for Scan
