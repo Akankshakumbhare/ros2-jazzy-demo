@@ -16,9 +16,8 @@ variables:
   aksCluster: prod-aks
 
 # =========================================================
-# STAGE 1 — BUILD + PUSH + SECURITY SCAN
+# STAGE 1 — BUILD + PUSH + SCAN
 # =========================================================
-stages:
 - stage: Build_Scan
   displayName: Build and Security Scan
 
@@ -29,14 +28,23 @@ stages:
     steps:
     - checkout: self
 
+    # Login to ACR
     - task: Docker@2
       displayName: Login to ACR
       inputs:
         command: login
         containerRegistry: $(dockerRegistryServiceConnection)
 
+    # Pull private base image first
+    - script: |
+        docker pull $(acrName)/ros:jazzy-ros-base
+      displayName: Pull Base Image
+
+    # Build and Push
     - task: Docker@2
       displayName: Build and Push Image
+      env:
+        DOCKER_BUILDKIT: 0
       inputs:
         command: buildAndPush
         repository: $(imageName)
@@ -46,9 +54,11 @@ stages:
           $(imageTag)
           latest
 
+    # Verify images
     - script: docker images
       displayName: List Docker Images
 
+    # Install Trivy
     - script: |
         sudo apt-get update
         sudo apt-get install -y wget
@@ -59,23 +69,27 @@ stages:
         trivy --version
       displayName: Install Trivy
 
+    # Scan image
     - script: |
         trivy image \
           --timeout 10m \
-          --severity CRITICAL,HIGH \
+          --severity HIGH,CRITICAL \
           --exit-code 1 \
           --no-progress \
           $(acrName)/$(imageName):$(imageTag)
-      displayName: Security Scan
+      displayName: Trivy Security Scan
 
+    # Generate report
     - script: |
         trivy image \
           --format json \
           --output trivy-report.json \
           $(acrName)/$(imageName):$(imageTag)
-      displayName: Generate Report
+      displayName: Generate Trivy Report
 
+    # Publish report
     - task: PublishBuildArtifacts@1
+      displayName: Publish Trivy Report
       inputs:
         PathtoPublish: trivy-report.json
         ArtifactName: trivy-report
