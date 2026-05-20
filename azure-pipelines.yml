@@ -23,23 +23,29 @@ stages:
       displayName: Build Push Scan
 
       steps:
-        - checkout: self
+      - checkout: self
 
-        - task: Docker@2
-          displayName: Build and Push Image
-          inputs:
-            command: buildAndPush
-            repository: $(imageName)
-            Dockerfile: Dockerfile
-            containerRegistry: prodacr001-manual
-            tags: |
-              $(imageTag)
-              latest
+      - task: Docker@2
+        displayName: Login to ACR
+        inputs:
+         command: login
+         containerRegistry: prodacr001-manual
 
-        - script: docker images
-          displayName: List Docker Images
+      - task: Docker@2
+        displayName: Build and Push Image
+        inputs:
+         command: buildAndPush
+         repository: $(imageName)
+         Dockerfile: Dockerfile
+         containerRegistry: prodacr001-manual
+         tags: |
+          $(imageTag)
+          latest
 
-        - script: |
+      - script: docker images
+        displayName: List Docker Images
+
+      - script: |
             sudo apt-get update
             sudo apt-get install -y wget apt-transport-https gnupg lsb-release
 
@@ -52,33 +58,33 @@ stages:
             sudo apt-get install -y trivy
 
             trivy --version
-          displayName: Install Trivy
+        displayName: Install Trivy
 
-        - task: Docker@2
-          displayName: Login to ACR
-          inputs:
+      - task: Docker@2
+        displayName: Login to ACR
+        inputs:
             command: login
             containerRegistry: prodacr001-manual
 
-        - script: |
+      - script: |
             trivy image \
               --timeout 10m \
               --severity CRITICAL \
               --exit-code 1 \
               --no-progress \
               $(acrName)/$(imageName):$(imageTag)
-          displayName: Trivy Security Scan
+        displayName: Trivy Security Scan
 
-        - script: |
+      - script: |
             trivy image \
               --format json \
               --output trivy-report.json \
               $(acrName)/$(imageName):$(imageTag)
-          displayName: Generate Trivy Report
+        displayName: Generate Trivy Report
 
-        - task: PublishBuildArtifacts@1
-          displayName: Publish Trivy Report
-          inputs:
+      - task: PublishBuildArtifacts@1
+        displayName: Publish Trivy Report
+        inputs:
             PathtoPublish: trivy-report.json
             ArtifactName: trivy-report
 
