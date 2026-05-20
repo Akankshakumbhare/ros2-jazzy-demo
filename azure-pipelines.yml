@@ -52,9 +52,14 @@ stages:
     # Install Trivy
     - script: |
         sudo apt-get update
-        sudo apt-get install -y wget
-        wget https://github.com/aquasecurity/trivy/releases/latest/download/trivy_0.63.0_Linux-64bit.deb
-        sudo dpkg -i trivy_0.63.0_Linux-64bit.deb
+        sudo apt-get install -y wget apt-transport-https gnupg lsb-release
+        
+        # Add Trivy repository and install
+        wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | sudo apt-key add -
+        echo "deb https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main" | sudo tee -a /etc/apt/sources.list.d/trivy.list
+        sudo apt-get update
+        sudo apt-get install -y trivy
+        
         trivy --version
       displayName: Install Trivy
 
