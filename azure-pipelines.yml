@@ -170,18 +170,14 @@ stages:
             steps:
               - checkout: self
 
-              - task: Kubernetes@1
-                displayName: Authenticate to AKS
-                inputs:
-                  connectionType: Kubernetes Service Connection
-                  kubernetesServiceEndpoint: aks-service-connection
-                  command: login
-
               - task: KubernetesManifest@1
                 displayName: Deploy to AKS
                 inputs:
                   action: deploy
-                  kubernetesServiceConnection: aks-service-connection
+                  connectionType: azureResourceManager
+                  azureSubscriptionConnection: aks-service-connection
+                  azureResourceGroup: rg-prod-aks
+                  kubernetesCluster: prod-aks
                   namespace: $(namespace)
                   manifests: |
                     k8s/deployment.yaml
@@ -198,7 +194,6 @@ stages:
                   kubectl get pods -n $(namespace)
                   kubectl get svc -n $(namespace)
                 displayName: Validate Deployment
-
 # =========================================================
 # STAGE 4 — AUTO ROLLBACK
 # =========================================================
@@ -215,9 +210,10 @@ stages:
         - task: Kubernetes@1
           displayName: Authenticate to AKS
           inputs:
-            connectionType: Kubernetes Service Connection
-            kubernetesServiceEndpoint: aks-service-connection
-            command: login
+            connectionType: Azure Resource Manager
+            azureSubscriptionEndpoint: aks-service-connection
+            azureResourceGroup: rg-prod-aks
+            kubernetesCluster: prod-aks
 
         - script: |
             kubectl rollout undo deployment/ros2-jazzy-demo -n production
