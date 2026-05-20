@@ -45,9 +45,8 @@ stages:
         repository: $(imageName)
         Dockerfile: Dockerfile
         containerRegistry: $(dockerRegistryServiceConnection)
-        tags: 
-          $(imageTag)
-          latest
+        tags: $(imageTag)
+          addlatest = true
 
     # Verify images
     - script: |
