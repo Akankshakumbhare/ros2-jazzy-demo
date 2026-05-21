@@ -196,6 +196,43 @@ stages:
           steps:
           - checkout: self
 
+          # =========================================================
+          # ADD INGRESS CONTROLLER VERIFICATION HERE (BEFORE DEPLOYMENT)
+          # =========================================================
+          
+          # Verify NGINX Ingress Controller is running
+          - task: AzureCLI@2
+            displayName: 'Verify Ingress Controller'
+            inputs:
+              azureSubscription: $(kubernetesServiceConnection)
+              scriptType: bash
+              scriptLocation: inlineScript
+              inlineScript: |
+                az aks install-cli
+                az aks get-credentials --resource-group "$(aksResourceGroup)" --name "$(aksCluster)" --overwrite-existing
+                kubectl get pods -n ingress-nginx
+
+          # Get Ingress Controller External IP
+          - script: |
+              # Wait for ingress controller external IP
+              echo "Waiting for ingress controller IP..."
+              for i in {1..30}; do
+                IP=$(kubectl get svc -n ingress-nginx ingress-nginx-controller -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null)
+                if [ ! -z "$IP" ]; then
+                  echo "##vso[task.setvariable variable=INGRESS_IP]$IP"
+                  echo "Ingress Controller IP: $IP"
+                  break
+                fi
+                echo "Attempt $i/30 - IP not ready yet, waiting 10 seconds..."
+                sleep 10
+              done
+              
+              if [ -z "$IP" ]; then
+                echo "ERROR: Ingress controller IP not assigned after 5 minutes"
+                exit 1
+              fi
+            displayName: 'Get Ingress Controller IP'
+            continueOnError: 'false'
           # Create namespace
           - task: KubernetesManifest@1
             displayName: Create Namespace

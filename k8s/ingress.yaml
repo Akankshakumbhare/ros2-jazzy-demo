@@ -1,29 +1,27 @@
 apiVersion: networking.k8s.io/v1
 kind: Ingress
-
 metadata:
   name: ros2-ingress
+  namespace: production
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
 
 spec:
   ingressClassName: nginx
 
   tls:
     - hosts:
-        - 20.253.93.207.nip.io
+        - 20-55-123-88.nip.io
       secretName: ros2-tls
 
   rules:
-    - host: 20.253.93.207.nip.io
-
+    - host: 20-55-123-88.nip.io
       http:
         paths:
           - path: /
             pathType: Prefix
-
             backend:
               service:
                 name: ros2-service
-
                 port:
                   number: 80
-
