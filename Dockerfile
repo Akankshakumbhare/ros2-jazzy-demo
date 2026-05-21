@@ -21,7 +21,8 @@ SHELL ["/bin/bash", "-c"]
 RUN echo "source /opt/ros/jazzy/setup.bash" >> ~/.bashrc
 
 # Healthcheck
-HEALTHCHECK CMD ros2 topic list || exit 1
+HEALTHCHECK --interval=30s --timeout=10s --retries=3 CMD ros2 topic list | grep minimal_publisher || exit 1
+
 
 # Start ROS2 publisher and keep container alive
-CMD ["/bin/bash", "-c", "source /opt/ros/jazzy/setup.bash && ros2 run examples_rclcpp_minimal_publisher publisher_member_function || true; tail -f /dev/null"]
+CMD ["/bin/bash", "-c", "source /opt/ros/jazzy/setup.bash && exec ros2 run examples_rclcpp_minimal_publisher publisher_member_function"]
