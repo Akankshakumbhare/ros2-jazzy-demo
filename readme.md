@@ -1,277 +1,292 @@
-# ROS2 Jazzy CI/CD Demo
+ROS2 Jazzy CI/CD Demo
+Project Overview
 
-## Project Overview
+This project demonstrates a complete enterprise-grade CI/CD pipeline implementation for a ROS2 Jazzy application using:
 
-This project demonstrates a complete CI/CD pipeline implementation for a ROS2 Jazzy application using:
+Azure DevOps
+Docker
+Azure Kubernetes Service (AKS)
+Azure Container Registry (ACR)
+Terraform
+Helm
+NGINX Ingress Controller
+cert-manager
+Trivy Security Scanner
+Prometheus
+Grafana
 
-- Azure DevOps
-- Docker
-- Azure Kubernetes Service (AKS)
-- Azure Container Registry (ACR)
-- Prometheus
-- Grafana
+The solution automatically provisions infrastructure, builds, scans, validates, containerizes, deploys, and monitors a ROS2 application whenever developers push code changes to GitHub.
 
-The solution automatically builds, tests, containerizes, deploys, and monitors a ROS2 application whenever developers push code changes to GitHub.
-
----
-
-# High-Level Architecture
-
-```text
+High-Level Architecture
 Developer Push
       ↓
 GitHub Repository
       ↓
 Azure DevOps Pipeline
       ↓
-Docker Build & Test
+Terraform Infrastructure Provisioning
+      ↓
+Docker Build & Security Scan
       ↓
 Azure Container Registry (ACR)
       ↓
+Runtime Validation
+      ↓
 Azure Kubernetes Service (AKS)
+      ↓
+NGINX Ingress + TLS
       ↓
 ROS2 Application Pod
       ↓
 Prometheus + Grafana Monitoring
-```
+Architecture Components
+Component	Purpose
+GitHub	Source code management
+Azure DevOps	CI/CD automation
+Terraform	Infrastructure as Code
+Docker	Containerization
+Azure Container Registry	Container image storage
+Azure Kubernetes Service	Kubernetes orchestration
+Helm	Kubernetes package management
+NGINX Ingress Controller	External traffic routing
+cert-manager	Automatic TLS certificate management
+Trivy	Container vulnerability scanning
+Prometheus	Metrics collection
+Grafana	Monitoring dashboards
+Infrastructure Provisioning with Terraform
 
----
+Terraform provisions:
 
-# Architecture Diagram
-
-![Architecture](docs/architecture.png)
-
----
-
-# Technologies Used
-
-| Technology | Purpose |
-|---|---|
-| Docker | Containerization |
-| Azure DevOps | CI/CD pipeline |
-| Azure Container Registry | Container image storage |
-| Azure Kubernetes Service | Container orchestration |
-| Kubernetes | Deployment platform |
-| Prometheus | Metrics collection |
-| Grafana | Monitoring dashboard |
-| Helm | Kubernetes package management |
-| GitHub | Source control |
-
----
-
-# CI/CD Pipeline
+Azure Resource Group
+Azure Kubernetes Service (AKS)
+Azure Container Registry (ACR)
+Log Analytics Workspace
+NGINX Ingress Controller
+cert-manager
+Kubernetes Namespace
+ACR Pull Role Assignments
+Terraform Files
+terraform/
+├── main.tf
+├── variables.tf
+├── outputs.tf
+├── providers.tf
+└── terraform.tfvars
+Initialize Terraform
+terraform init
+Validate Terraform
+terraform validate
+Apply Infrastructure
+terraform apply -auto-approve
+CI/CD Pipeline
 
 The Azure DevOps pipeline automatically performs:
 
-1. Pull latest source code from GitHub
-2. Build Docker image
-3. Start ROS2 container
-4. Validate ROS2 publisher logs
-5. Publish build artifacts
-6. Push Docker image to Azure Container Registry
-7. Deploy application to AKS cluster
+Stage 1 — Build and Security Scan
+Pull latest source code from GitHub
+Build Docker image using ACR Tasks
+Push versioned image to Azure Container Registry
+Install Trivy security scanner
+Scan Docker image for vulnerabilities
+Publish Trivy scan reports
+Stage 2 — Runtime Validation
+Pull Docker image from ACR
+Run ROS2 container
+Validate ROS2 publisher logs
+Publish runtime logs as pipeline artifacts
+Stage 3 — Deploy to AKS
+Verify NGINX ingress controller
+Retrieve external ingress IP
+Create Kubernetes namespace
+Deploy application manifests
+Deploy ingress and TLS configuration
+Validate pods, services, and ingress resources
+Stage 4 — Automatic Rollback
+Automatically rollback deployment if deployment fails
 
 Pipeline file:
 
-```text
 azure-pipelines.yml
-```
+Docker Configuration
+Dockerfile
+FROM prodacr001.azurecr.io/ros:jazzy-ros-base
 
----
+LABEL maintainer="Akanksha"
+LABEL description="ROS2 Jazzy CI/CD Demo"
 
-# Docker Build
-
-## Dockerfile
-
-```dockerfile
-FROM ros:jazzy-ros-base
-
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     ros-jazzy-examples-rclcpp-minimal-publisher \
     ros-jazzy-examples-rclcpp-minimal-subscriber \
     && rm -rf /var/lib/apt/lists/*
 
-CMD ["ros2", "run", "examples_rclcpp_minimal_publisher", "publisher_member_function"]
-```
+RUN useradd -ms /bin/bash rosuser
 
-## Build Locally
+USER rosuser
+WORKDIR /home/rosuser
 
-```bash
+SHELL ["/bin/bash", "-c"]
+
+RUN echo "source /opt/ros/jazzy/setup.bash" >> ~/.bashrc
+
+HEALTHCHECK --interval=30s --timeout=10s --retries=3 CMD ros2 topic list || exit 1
+
+CMD ["/bin/bash", "-c", "source /opt/ros/jazzy/setup.bash && exec ros2 run examples_rclcpp_minimal_publisher publisher_member_function"]
+Build Docker Image Locally
 docker build -t ros2-jazzy-demo .
-```
-
-## Run Locally
-
-```bash
+Run Container Locally
 docker run ros2-jazzy-demo
-```
-
----
-
-# Azure Container Registry
+Azure Container Registry (ACR)
 
 Docker images are securely stored in Azure Container Registry.
 
 Example:
 
-```text
-ros2registry.azurecr.io
-```
+prodacr001.azurecr.io
 
----
+Images are pushed with:
 
-# AKS Deployment
+Immutable build tags
+Latest tag
 
-Deployment manifests:
+Example:
 
-```text
-k8s/deployment.yaml
-k8s/service.yaml
-k8s/ingress.yaml
-```
+prodacr001.azurecr.io/ros2-jazzy-demo:15
+prodacr001.azurecr.io/ros2-jazzy-demo:latest
+Kubernetes Deployment
 
-Deploy manually:
+Kubernetes manifests are located in:
 
-```bash
+k8s/
+├── namespace.yaml
+├── deployment.yaml
+├── service.yaml
+└── ingress.yaml
+Deploy Manually
 kubectl apply -f k8s/
-```
+Verify Deployment
+kubectl get pods -n production
+kubectl get svc -n production
+kubectl get ingress -n production
+NGINX Ingress Controller
 
-Verify:
+Ingress controller is installed using Helm.
 
-```bash
-kubectl get pods
-kubectl get services
-kubectl get ingress
-```
+helm install ingress-nginx ingress-nginx/ingress-nginx \
+  --namespace ingress-nginx \
+  --create-namespace
 
----
+Ingress provides:
 
-# Monitoring
+External access
+TLS termination
+Load balancing
+TLS with cert-manager
+
+TLS certificates are automatically generated using Let's Encrypt and cert-manager.
+
+Features
+Automatic HTTPS
+Automatic certificate renewal
+Secure ingress communication
+
+ClusterIssuer is managed through Terraform using Kubernetes manifests.
+
+Security Scanning with Trivy
+
+The pipeline includes container image security scanning using Trivy.
+
+Security Features
+Vulnerability scanning
+Critical severity blocking
+JSON report generation
+Artifact publishing
+
+Example scan:
+
+trivy image prodacr001.azurecr.io/ros2-jazzy-demo:latest
+Monitoring
 
 Monitoring stack includes:
 
-- Prometheus
-- Grafana
-- Kubernetes logs
+Prometheus
+Grafana
+Kubernetes logs
+AKS metrics
 
 Installed using Helm:
 
-```bash
 helm install prometheus prometheus-community/prometheus
 
 helm install grafana grafana/grafana
-```
-
-Dashboard export:
-
-```text
-monitoring/grafana-kubernetes-dashboard.json
-```
-
----
-
-# TLS / Security
-
-Security features include:
-
-- Kubernetes TLS secret
-- NGINX Ingress Controller
-- Private Azure Container Registry authentication
-- Immutable Docker images
-
-TLS configuration:
-
-```text
-k8s/ingress.yaml
-```
-
----
-
-# Logs and Metrics
-
-View ROS2 logs:
-
-```bash
-kubectl logs deployment/ros2-publisher
-```
-
-Grafana dashboards provide:
-
-- CPU utilization
-- Memory usage
-- Network traffic
-- Pod health
-
----
-
-# How to Run Locally
-
-## Clone Repository
-
-```bash
+Logs and Metrics
+View ROS2 Logs
+kubectl logs deployment/ros2-jazzy-demo -n production
+Grafana Dashboards Provide
+CPU utilization
+Memory usage
+Network traffic
+Pod health
+Cluster metrics
+How to Run Locally
+Clone Repository
 git clone https://github.com/Akankshakumbhare/ros2-jazzy-demo.git
-```
-
-## Build Docker Image
-
-```bash
+Build Docker Image
 docker build -t ros2-jazzy-demo .
-```
-
-## Run Container
-
-```bash
+Run Container
 docker run ros2-jazzy-demo
-```
-
-## Deploy to Kubernetes
-
-```bash
+Deploy to Kubernetes
 kubectl apply -f k8s/
-```
+Production Features Implemented
+Feature	Purpose
+Terraform IaC	Automated infrastructure provisioning
+Trivy Security Scan	Container vulnerability scanning
+Automatic Rollback	Safer deployments
+cert-manager	Automatic TLS certificates
+NGINX Ingress	Secure traffic routing
+ACR Integration	Private image registry
+Runtime Validation	ROS2 publisher verification
+Azure Policy	AKS governance
+OIDC & Workload Identity	Modern AKS authentication
+Log Analytics	Centralized logging
+Future Improvements
+Improvement	Benefit
+Helm charts	Reusable Kubernetes deployments
+ArgoCD	GitOps continuous delivery
+HPA autoscaling	Automatic scaling
+SonarQube	Code quality analysis
+Azure Monitor	Advanced observability
+Multi-stage Docker builds	Smaller container images
+Blue-Green Deployment	Zero downtime deployments
+Screenshots
+AKS Pods
 
----
+Add screenshot here
 
-# Production Improvements
+Azure DevOps Pipeline
 
-| Improvement | Benefit |
-|---|---|
-| Trivy image scanning | Container security |
-| SonarQube integration | Code quality |
-| Helm charts | Reusable deployments |
-| ArgoCD | GitOps deployment |
-| cert-manager | Automatic TLS renewal |
-| HPA autoscaling | Automatic scaling |
-| Azure Monitor | Centralized observability |
+Add screenshot here
 
----
+Grafana Dashboard
 
-# Screenshots
+Add screenshot here
 
-## AKS Pods
+Conclusion
 
-![AKS-Pod](docs/AKS-Pod.png)
-
-## Azure Pipeline
-
-![Azurepipeline](docs/Azurepipeline.png)
-
-## Grafana Dashboard
-
-![Grafana](docs/Grafana.png)
-
----
-
-# Conclusion
-
-This project demonstrates a complete end-to-end CI/CD implementation for ROS2 Jazzy applications using modern DevOps practices.
+This project demonstrates a complete end-to-end enterprise-grade CI/CD implementation for ROS2 Jazzy applications using modern DevOps and cloud-native practices.
 
 The solution provides:
 
-- Automated build and testing
-- Containerized ROS2 deployment
-- Kubernetes orchestration
-- Centralized monitoring
-- Secure image management
-- Scalable cloud-native architecture
+Automated infrastructure provisioning
+Automated Docker builds
+Container vulnerability scanning
+Runtime validation
+Kubernetes orchestration
+Secure ingress with TLS
+Automatic rollback
+Centralized monitoring
+Scalable cloud-native architecture
 
+The project showcases Infrastructure as Code, Kubernetes deployment automation, container security, and production-ready DevOps workflows on Microsoft Azure.
+
+Project Limitation
+The ROS2 publisher container is not an HTTP web application and does not expose a web server on port 80.
