@@ -21,11 +21,18 @@ spec:
 
       - name: ros2-publisher
 
-        image: prodacr001.azurecr.io/ros2-jazzy-demo
+        image: prodacr001.azurecr.io/ros2-jazzy-demo:$(Build.BuildId)
 
         imagePullPolicy: Always
+        ports:
+        - containerPort: 80
 
         resources:
+        
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+ 
           limits:
             memory: "512Mi"
             cpu: "500m"

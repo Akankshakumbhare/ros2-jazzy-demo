@@ -4,6 +4,7 @@ kind: Service
 
 metadata:
   name: ros2-service
+  namespace: production
 
 spec:
   selector:
